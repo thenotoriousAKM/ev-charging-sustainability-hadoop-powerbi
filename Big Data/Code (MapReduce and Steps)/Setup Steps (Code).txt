@@ -1,0 +1,55 @@
+Hadoop pre processing steps:
+
+ Go to Project Directory
+	cd /home/hdoop
+	mkdir -p csvcleaner
+	cd csvcleaner
+
+Place your CSV file in a folder
+	mkdir -p inputcsv
+	cp /path/to/casestudydata.csv inputcsv/
+In this case
+	cp ~/Downloads/casestudydata.csv inputcsv/
+
+Create the Java code (only once)
+	nano CSVCleaner.java
+
+Compile the Java file (only if changed or first time)
+	mkdir -p classes
+	javac -classpath $(hadoop classpath) -d classes CSVCleaner.java
+
+Create the JAR file (or overwrite old one)
+	jar -cvf csvcleaner.jar -C classes/ .
+
+Upload the CSV file to HDFS
+	hdfs dfs -mkdir -p /csvproject/input
+	hdfs dfs -put -f inputcsv/casestudydata.csv /csvproject/input/
+
+Run the MapReduce Job
+	hadoop jar csvcleaner.jar CSVCleaner /csvproject/input /csvproject/output
+
+If /csvproject/output already exists, delete it:
+	hdfs dfs -rm -r /csvproject/output
+then re-run the command
+
+View the Cleaned Output
+	hdfs dfs -cat /csvproject/output/part-r-00000
+or save it locally
+	hdfs dfs -get /csvproject/output/part-r-00000 cleaned_casestudydata.csv
+
+RUNNING IT AGAIN
+Replace your CSV file with the new version:
+	cp ~/Downloads/casestudydata.csv inputcsv/
+
+Upload it to HDFS (overwrite the old one)
+	hdfs dfs -put -f inputcsv/casestudydata.csv /csvproject/input/
+
+Delete old output folder (HDFS doesn't overwrite outputs)
+	hdfs dfs -rm -r /csvproject/output
+
+Run the MapReduce job again
+	hadoop jar csvcleaner.jar CSVCleaner /csvproject/input /csvproject/output
+
+
+
+

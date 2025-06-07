@@ -1,0 +1,90 @@
+import java.io.IOException;
+import java.util.HashSet;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.*;
+import org.apache.hadoop.mapreduce.*;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class CSVCleaner {
+
+    public static class CleanMapper extends Mapper<LongWritable, Text, Text, NullWritable> {
+        private HashSet<String> seenRows = new HashSet<>();
+
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            String line = value.toString().trim();
+
+            // Skip empty lines or header
+            if (line.isEmpty() || line.startsWith("Date")) return;
+
+            // Remove duplicates (in mapper to reduce load on reducer)
+            if (!seenRows.contains(line)) {
+                seenRows.add(line);
+
+                // Split the line into fields
+                String[] fields = line.split("\t");
+
+                try {
+                    // Extract values from relevant columns
+                    double chargesPerDay = Double.parseDouble(fields[2]);
+                    double energyDelivered = Double.parseDouble(fields[3]);
+                    double revenuePerSession = Double.parseDouble(fields[4]);
+                    double avgTime = Double.parseDouble(fields[5]);
+                    double utilization = Double.parseDouble(fields[6]);
+                    double renewablePercent = Double.parseDouble(fields[8]);
+                    double co2Saved = Double.parseDouble(fields[9]);
+
+                    // Derived columns
+                    double revenuePerKWh = (energyDelivered != 0) ? revenuePerSession / energyDelivered : 0;
+                    double energyEfficiency = (avgTime != 0) ? energyDelivered / avgTime : 0;
+                    double co2SavedPerSession = (chargesPerDay != 0) ? co2Saved / chargesPerDay : 0;
+
+                    // Normalize for sustainability score (0-100 scale assumed)
+                    double normalizedRenewable = renewablePercent; // out of 100
+                    double normalizedUtilization = utilization;     // out of 100
+                    double normalizedCO2PerSession = (co2SavedPerSession > 10) ? 100 : (co2SavedPerSession * 10);
+
+                    double sustainabilityScore = 0.4 * normalizedRenewable + 0.3 * normalizedUtilization + 0.3 * normalizedCO2PerSession;
+
+                    // Append derived values to the original line
+                    StringBuilder output = new StringBuilder(line);
+                    output.append("\t").append(String.format("%.2f", revenuePerKWh));
+                    output.append("\t").append(String.format("%.2f", energyEfficiency));
+                    output.append("\t").append(String.format("%.2f", co2SavedPerSession));
+                    output.append("\t").append(String.format("%.2f", sustainabilityScore));
+
+                    context.write(new Text(output.toString()), NullWritable.get());
+
+                } catch (Exception e) {
+                    // In case of parsing error, skip the line
+                }
+            }
+        }
+    }
+
+    public static class CleanReducer extends Reducer<Text, NullWritable, Text, NullWritable> {
+        public void reduce(Text key, Iterable<NullWritable> values, Context context)
+                throws IOException, InterruptedException {
+            context.write(key, NullWritable.get());
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "CSV Cleaner and Deriver");
+
+        job.setJarByClass(CSVCleaner.class);
+        job.setMapperClass(CleanMapper.class);
+        job.setReducerClass(CleanReducer.class);
+
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(NullWritable.class);
+
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+}
