@@ -75,6 +75,6 @@ BI Dashboards were made to get insights about Sustainability, Finance, and Opera
 
 **Operational Dashboard**
 
-| ![Operational Dashboard](Business Intelligence/Operations Dashboard.png>) |
+| ![Operational Dashboard](<Business Intelligence/Operations Dashboard.png>) |
 |:----------------------------------------:|
 | *Fig. 5: Operational Dashboard*  |
